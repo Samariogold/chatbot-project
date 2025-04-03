@@ -1,0 +1,35 @@
+{
+  "intents": [
+    {
+      "tag": "saludo",
+      "patterns": ["Hola", "Buenos días", "Buenas tardes", "Hey", "¿Hay alguien ahí?", "Quiero una aventura"],
+      "responses": [
+        "¡Hola! Soy Lafi 🤖. Estoy aquí para ayudarte a vivir tu próxima Lafiaventura. Primero, dime qué empresa o persona deseas explorar. Aquí tienes algunas opciones: [Espera la lista...]"
+      ]
+    },
+    {
+      "tag": "empresa_seleccionada",
+      "patterns": ["Caribe Tours", "Naturaleza Viva", "Quiero ver Caribe Tours", "Ver Naturaleza Viva"],
+      "responses": [
+        "¡Perfecto! Aquí están las Lafiaventuras que ofrece {empresa}: [Espera la lista de aventuras...]"
+      ]
+    },
+    {
+      "tag": "lafiaventura_seleccionada",
+      "patterns": ["Kayak en la Ciénaga", "Senderismo al amanecer", "Quiero kayak", "Senderismo", "Quiero hacer la Lafiaventura de Kayak"],
+      "responses": [
+        "Genial, tu código para la Lafiaventura '{aventura}' es: {codigo}. ¡Nos vemos pronto! 🌟"
+      ]
+    },
+    {
+      "tag": "despedida",
+      "patterns": ["Adiós", "Nos vemos", "Gracias", "Hasta luego", "Salir"],
+      "responses": ["¡Adiós! 👋 Esperamos verte pronto en una nueva Lafiaventura."]
+    },
+    {
+      "tag": "ayuda",
+      "patterns": ["Ayuda", "No sé qué hacer", "Opciones"],
+      "responses": ["Estoy aquí para ayudarte. Puedes saludarme, pedirme una Lafiaventura o escribir 'salir' para terminar."]
+    }
+  ]
+}
