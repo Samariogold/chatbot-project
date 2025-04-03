@@ -1,39 +1,39 @@
-import os
+import random
 import json
 import pickle
-import random
 import numpy as np
-from flask import Flask, request
-from twilio.rest import Client
-from dotenv import load_dotenv
+import nltk
 from nltk.stem import WordNetLemmatizer
-from nltk.tokenize.simple import SpaceTokenizer
+from flask import Flask, request
+from twilio.twiml.messaging_response import MessagingResponse
 from tensorflow.keras.models import load_model
 
 # Inicializar Flask
 app = Flask(__name__)
 
-# Cargar variables de entorno
-load_dotenv()
-TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
-TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
-TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
+# Configurar NLTK
+nltk.data.path.append('/opt/render/project/src/nltk_data')  # Ruta válida en Render
 
-client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-
-# NLP y modelo
+# Inicializar utilidades de NLP
 lemmatizer = WordNetLemmatizer()
-tokenizer = SpaceTokenizer()
+
+# Cargar archivos entrenados
 intents = json.loads(open('intents.json').read())
 words = pickle.load(open('words.pkl', 'rb'))
 classes = pickle.load(open('classes.pkl', 'rb'))
 model = load_model('chatbot_model.h5')
 
+# Tokenizador básico sin punkt
+from nltk.tokenize.simple import SpaceTokenizer
+tokenizer = SpaceTokenizer()
+
+# Limpieza de oración
 def clean_up_sentence(sentence):
     sentence_words = tokenizer.tokenize(sentence)
     sentence_words = [lemmatizer.lemmatize(word.lower()) for word in sentence_words]
     return sentence_words
 
+# Crear bolsa de palabras
 def bag_of_words(sentence):
     sentence_words = clean_up_sentence(sentence)
     bag = [0] * len(words)
@@ -43,43 +43,40 @@ def bag_of_words(sentence):
                 bag[i] = 1
     return np.array(bag)
 
+# Predecir intención
 def predict_class(sentence):
     bow = bag_of_words(sentence)
     res = model.predict(np.array([bow]))[0]
     ERROR_THRESHOLD = 0.25
     results = [[i, r] for i, r in enumerate(res) if r > ERROR_THRESHOLD]
     results.sort(key=lambda x: x[1], reverse=True)
-    return_list = []
-    for r in results:
-        return_list.append({"intent": classes[r[0]], "probability": str(r[1])})
-    return return_list
+    return [{"intent": classes[r[0]], "probability": str(r[1])} for r in results]
 
+# Obtener respuesta
 def get_response(intents_list, intents_json):
     if not intents_list:
-        return "Lo siento, no entendí tu mensaje."
+        return "Lo siento, no entendí tu mensaje. ¿Puedes reformularlo?"
     tag = intents_list[0]['intent']
-    for i in intents_json['intents']:
-        if i['tag'] == tag:
-            return random.choice(i['responses'])
+    for intent in intents_json['intents']:
+        if intent['tag'] == tag:
+            return random.choice(intent['responses'])
 
+# Endpoint para WhatsApp
 @app.route("/whatsapp", methods=["POST"])
 def whatsapp():
     msg = request.values.get("Body", "")
-    from_number = request.values.get("From")
-    
-    ints = predict_class(msg)
-    res = get_response(ints, intents)
-    
-    client.messages.create(
-        body=res,
-        from_=TWILIO_PHONE_NUMBER,
-        to=from_number
-    )
-    return "OK", 200
+    from_number = request.values.get("From", "")
 
-@app.route("/", methods=["GET"])
-def index():
-    return "✅ LafiBot en Flask está activo."
+    print(f"📩 Mensaje recibido de {from_number}: {msg}")
 
+    intents_list = predict_class(msg)
+    response_text = get_response(intents_list, intents)
+
+    resp = MessagingResponse()
+    resp.message(response_text)
+
+    return str(resp)
+
+# Ejecutar localmente (opcional para pruebas)
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5001)
+    app.run(debug=True)
