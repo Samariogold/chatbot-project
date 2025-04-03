@@ -54,7 +54,6 @@ def whatsapp():
     if not from_number:
         return "Error: No se recibió el número 'From' desde Twilio", 400
 
-    # Reinicio por inactividad
     ahora = time.time()
     if from_number in last_interaction and ahora - last_interaction[from_number] > 300:
         user_states[from_number] = 'inicio'
@@ -109,7 +108,7 @@ def whatsapp():
         if codigo:
             user_states[from_number] = 'inicio'
             return responder(
-                f"¡Genial! 😄\nTu código para la Lafiaventura *{lafiaventura}* de *{empresa}* es:\n\n{codigo}\n\n¿Quieres consultar otra empresa? Escribe 'inicio'.",
+                f"¡Genial! 😄\nTu código para la Lafiaventura *{lafiaventura}* de *{empresa}* es:\n\n👉 *{codigo}*\n\n¿Quieres consultar otra empresa? Escribe 'inicio'.",
                 from_number
             )
         else:
@@ -117,6 +116,3 @@ def whatsapp():
 
     else:
         return responder("No entendí tu mensaje. Escribe 'inicio' para empezar de nuevo.", from_number)
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5001)
