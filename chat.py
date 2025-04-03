@@ -1,34 +1,24 @@
+from flask import Flask, request
+from twilio.twiml.messaging_response import MessagingResponse
 import random
 import json
 import pickle
 import numpy as np
-import nltk
-import warnings
-
-from flask import Flask, request
 from nltk.stem import WordNetLemmatizer
 from tensorflow.keras.models import load_model
-from twilio.twiml.messaging_response import MessagingResponse
 from nltk.tokenize.simple import SpaceTokenizer
 
-# Configurar rutas de nltk y desactivar advertencias
-nltk.data.path.append('/opt/render/project/src/nltk_data')  # Ruta para entorno en producción
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-
-# Inicializar Flask
 app = Flask(__name__)
 
-# Cargar recursos del chatbot
 lemmatizer = WordNetLemmatizer()
+tokenizer = SpaceTokenizer()
+
+# Cargar recursos
 intents = json.loads(open('intents.json').read())
 words = pickle.load(open('words.pkl', 'rb'))
 classes = pickle.load(open('classes.pkl', 'rb'))
 model = load_model('chatbot_model.h5')
 
-# Tokenizador básico para evitar error con punkt
-tokenizer = SpaceTokenizer()
-
-# Preprocesamiento de entrada
 def clean_up_sentence(sentence):
     sentence_words = tokenizer.tokenize(sentence)
     sentence_words = [lemmatizer.lemmatize(word.lower()) for word in sentence_words]
@@ -43,7 +33,6 @@ def bag_of_words(sentence):
                 bag[i] = 1
     return np.array(bag)
 
-# Predicción de intención
 def predict_class(sentence):
     bow = bag_of_words(sentence)
     res = model.predict(np.array([bow]))[0]
@@ -52,41 +41,34 @@ def predict_class(sentence):
     results.sort(key=lambda x: x[1], reverse=True)
     return [{'intent': classes[r[0]], 'probability': str(r[1])} for r in results]
 
-# Selección de respuesta
 def get_response(intents_list, intents_json):
-    if not intents_list:
-        return "Lo siento, no entiendo tu pregunta."
+    if len(intents_list) == 0:
+        return "Lo siento, no entendí tu mensaje."
     tag = intents_list[0]['intent']
-    for intent in intents_json['intents']:
-        if intent['tag'] == tag:
-            return random.choice(intent['responses'])
+    for i in intents_json['intents']:
+        if i['tag'] == tag:
+            return random.choice(i['responses'])
 
-# Ruta para recibir mensajes de WhatsApp
 @app.route("/whatsapp", methods=["POST"])
 def whatsapp():
     try:
         msg = request.values.get("Body", "")
-        from_number = request.values.get("From", "")
+        from_number = request.values.get("From")
 
         print(f"📩 Mensaje recibido de {from_number}: {msg}")
 
-        intents_list = predict_class(msg)
-        response_text = get_response(intents_list, intents)
+        ints = predict_class(msg)
+        res = get_response(ints, intents)
 
-        print(f"🤖 Enviando respuesta: {response_text}")
-
-        resp = MessagingResponse()
-        resp.message(response_text)
-        return str(resp)
+        response = MessagingResponse()
+        response.message(res)
+        return str(response)
 
     except Exception as e:
-        print(f"🚨 Error en /whatsapp: {e}")
-        resp = MessagingResponse()
-        resp.message("Lo siento, ocurrió un error en el bot. Intenta más tarde.")
-        return str(resp)
+        print(f"❌ Error procesando mensaje: {e}")
+        response = MessagingResponse()
+        response.message("Lo siento, ocurrió un error en el bot. Intenta más tarde.")
+        return str(response)
 
-# Ruta raíz opcional
-@app.route("/")
-def index():
-    return "🤖 El chatbot está activo."
-
+if __name__ == "__main__":
+    app.run()
