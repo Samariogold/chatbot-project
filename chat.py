@@ -18,6 +18,8 @@ from nltk.tokenize import word_tokenize
 from tensorflow.keras.models import load_model
 
 app = Flask(__name__)
+
+# Inicializar lematizador
 lemmatizer = WordNetLemmatizer()
 
 # Cargar archivos
@@ -30,7 +32,7 @@ try:
     model = load_model("chatbot_model.h5")
     print("✅ Recursos cargados correctamente.")
 except Exception as e:
-    print("❌ Error al cargar archivos:")
+    print("❌ Error cargando archivos del bot:")
     traceback.print_exc()
 
 # Preprocesamiento
@@ -46,19 +48,24 @@ def bag_of_words(sentence):
         for i, word in enumerate(words):
             if word == w:
                 bag[i] = 1
-    print(f"🧩 Bag of Words: {bag}")
+    print(f"🧩 Bag of Words generado: {bag}")
     return np.array(bag)
 
 def predict_class(sentence):
     print("🧠 Iniciando predicción...")
-    bow = bag_of_words(sentence)
-    print(f"🧠 Input al modelo: {bow}")
-    res = model.predict(np.array([bow]))[0]
-    print(f"🎯 Resultado crudo del modelo: {res}")
-    threshold = 0.25
-    results = [[i, r] for i, r in enumerate(res) if r > threshold]
-    results.sort(key=lambda x: x[1], reverse=True)
-    return [{'intent': classes[r[0]], 'probability': str(r[1])} for r in results]
+    try:
+        bow = bag_of_words(sentence)
+        print(f"🧠 Array para modelo: {np.array([bow])}")
+        res = model.predict(np.array([bow]))[0]
+        print(f"🔮 Resultado del modelo: {res}")
+        threshold = 0.25
+        results = [[i, r] for i, r in enumerate(res) if r > threshold]
+        results.sort(key=lambda x: x[1], reverse=True)
+        return [{'intent': classes[r[0]], 'probability': str(r[1])} for r in results]
+    except Exception as e:
+        print("❌ Error en predict_class:")
+        traceback.print_exc()
+        return []
 
 def get_response(intents_list, intents_json):
     if not intents_list:
@@ -78,9 +85,7 @@ def whatsapp():
         print(f"📩 Mensaje recibido de WhatsApp: {from_number}: {msg}")
 
         ints = predict_class(msg)
-        print(f"📊 Intents detectados: {ints}")
         res = get_response(ints, intents)
-        print(f"💬 Respuesta generada: {res}")
     except Exception as e:
         print("❌ Error capturado en /whatsapp:")
         traceback.print_exc()
@@ -90,5 +95,6 @@ def whatsapp():
     resp.message(res)
     return str(resp)
 
+# Para ejecución local
 if __name__ == "__main__":
     app.run(debug=True)
