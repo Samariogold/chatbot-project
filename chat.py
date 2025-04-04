@@ -19,7 +19,6 @@ from tensorflow.keras.models import load_model
 
 app = Flask(__name__)
 
-# Inicializar lematizador
 lemmatizer = WordNetLemmatizer()
 
 # Cargar archivos
@@ -43,30 +42,28 @@ def clean_up_sentence(sentence):
 
 def bag_of_words(sentence):
     sentence_words = clean_up_sentence(sentence)
+    print("🧹 Palabras limpias:", sentence_words)
     bag = [0] * len(words)
     for w in sentence_words:
         for i, word in enumerate(words):
             if word == w:
                 bag[i] = 1
-    print(f"🧩 Bag of Words generado: {bag}")
+    print("📊 Array para el modelo:", bag)
     return np.array(bag)
 
 def predict_class(sentence):
     try:
         print("🧠 Iniciando predicción...")
         bow = bag_of_words(sentence)
-        print("🧠 Array para modelo:", bow.tolist())  # Para verificar el input
         res = model.predict(np.array([bow]))[0]
-        print("🔮 Resultado del modelo:", res.tolist())  # Para verificar el output
-
+        print("🔮 Resultados del modelo:", res)
         threshold = 0.25
         results = [[i, r] for i, r in enumerate(res) if r > threshold]
         results.sort(key=lambda x: x[1], reverse=True)
+        print("✅ Intents detectados:", results)
         return [{'intent': classes[r[0]], 'probability': str(r[1])} for r in results]
-
     except Exception as e:
-        print("❌ Error en predict_class:", e)
-        import traceback
+        print("❌ Error en predict_class:")
         traceback.print_exc()
         return []
 
@@ -79,7 +76,6 @@ def get_response(intents_list, intents_json):
             return random.choice(intent['responses'])
     return "Lo siento, no tengo respuesta para eso."
 
-# Ruta de WhatsApp
 @app.route("/whatsapp", methods=["POST"])
 def whatsapp():
     try:
@@ -98,6 +94,6 @@ def whatsapp():
     resp.message(res)
     return str(resp)
 
-# Para ejecución local
+# Local
 if __name__ == "__main__":
     app.run(debug=True)
