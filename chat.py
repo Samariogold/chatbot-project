@@ -4,10 +4,8 @@ import pickle
 import numpy as np
 from flask import Flask, request
 from twilio.twiml.messaging_response import MessagingResponse
-import nltk
-import traceback
 
-# Descargas necesarias de NLTK
+import nltk
 nltk.download('punkt')
 nltk.download('wordnet')
 nltk.download('omw-1.4')
@@ -17,18 +15,19 @@ from nltk.tokenize import word_tokenize
 from tensorflow.keras.models import load_model
 
 app = Flask(__name__)
+
 lemmatizer = WordNetLemmatizer()
 
-# Cargar los archivos necesarios
+# Cargar recursos
 try:
+    print("📦 Cargando archivos...")
     intents = json.loads(open('intents.json').read())
     words = pickle.load(open('words.pkl', 'rb'))
     classes = pickle.load(open('classes.pkl', 'rb'))
     model = load_model('chatbot_model.h5')
-    print("✅ Modelo y archivos cargados correctamente")
+    print("✅ Recursos cargados correctamente.")
 except Exception as e:
-    print("❌ Error cargando modelo o archivos:")
-    traceback.print_exc()
+    print(f"❌ Error cargando recursos: {e}")
 
 # Funciones del bot
 def clean_up_sentence(sentence):
@@ -46,41 +45,44 @@ def bag_of_words(sentence):
     return np.array(bag)
 
 def predict_class(sentence):
+    print("🔍 Iniciando predicción...")
     bow = bag_of_words(sentence)
     res = model.predict(np.array([bow]))[0]
+    print(f"📊 Resultados del modelo: {res}")
     error_threshold = 0.25
     results = [[i, r] for i, r in enumerate(res) if r > error_threshold]
+
     results.sort(key=lambda x: x[1], reverse=True)
-    return [{'intent': classes[r[0]], 'probability': str(r[1])} for r in results]
+    return_list = []
+    for r in results:
+        return_list.append({'intent': classes[r[0]], 'probability': str(r[1])})
+    print(f"🎯 Intenciones detectadas: {return_list}")
+    return return_list
 
 def get_response(intents_list, intents_json):
     if not intents_list:
         return "Lo siento, no entiendo tu pregunta."
+    
     tag = intents_list[0]['intent']
     for i in intents_json['intents']:
         if i['tag'] == tag:
             return random.choice(i['responses'])
     return "Lo siento, no tengo respuesta para eso."
 
-# Ruta principal para WhatsApp
+# Ruta para mensajes desde WhatsApp
 @app.route("/whatsapp", methods=["POST"])
 def whatsapp():
     try:
         msg = request.values.get("Body", "")
         from_number = request.values.get("From")
 
-        print("📩 Mensaje recibido de WhatsApp:", from_number, msg)
-        print("✅ Iniciando predicción...")
+        print(f"📩 Mensaje recibido de WhatsApp: {from_number}: {msg}")
 
         ints = predict_class(msg)
-        print("🔍 Intenciones detectadas:", ints)
-
         res = get_response(ints, intents)
-        print("🤖 Respuesta generada:", res)
 
     except Exception as e:
-        print("❌ Error capturado en /whatsapp:")
-        traceback.print_exc()
+        print(f"❌ Error capturado en /whatsapp: {e}")
         res = "Lo siento, ocurrió un error en el bot. Intenta más tarde."
 
     resp = MessagingResponse()
