@@ -52,18 +52,21 @@ def bag_of_words(sentence):
     return np.array(bag)
 
 def predict_class(sentence):
-    print("🧠 Iniciando predicción...")
     try:
+        print("🧠 Iniciando predicción...")
         bow = bag_of_words(sentence)
-        print(f"🧠 Array para modelo: {np.array([bow])}")
+        print("🧠 Array para modelo:", bow.tolist())  # Para verificar el input
         res = model.predict(np.array([bow]))[0]
-        print(f"🔮 Resultado del modelo: {res}")
+        print("🔮 Resultado del modelo:", res.tolist())  # Para verificar el output
+
         threshold = 0.25
         results = [[i, r] for i, r in enumerate(res) if r > threshold]
         results.sort(key=lambda x: x[1], reverse=True)
         return [{'intent': classes[r[0]], 'probability': str(r[1])} for r in results]
+
     except Exception as e:
-        print("❌ Error en predict_class:")
+        print("❌ Error en predict_class:", e)
+        import traceback
         traceback.print_exc()
         return []
 
