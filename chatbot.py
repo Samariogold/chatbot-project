@@ -4,99 +4,85 @@ import pickle
 import numpy as np
 import nltk
 from nltk.stem import WordNetLemmatizer
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout
-from tensorflow.keras.optimizers import SGD
+from flask import Flask, request
+from tensorflow.keras.models import load_model
+from twilio.twiml.messaging_response import MessagingResponse
 
-# Configurar rutas para evitar problemas con 'punkt_tab'
-nltk.data.path.append('/Users/ronaldalfaro/nltk_data')
-
-# Ignorar advertencias de SSL
-import warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-
-# Descargar las librerías necesarias si aún no están disponibles
-nltk.download('punkt')
+# Descargar recursos necesarios de NLTK
 nltk.download('wordnet')
+nltk.download('omw-1.4')
 
+# Inicializar Flask
+app = Flask(__name__)
+
+# Inicializar lematizador
 lemmatizer = WordNetLemmatizer()
 
-# Cargar los datos desde intents.json
-with open('intents.json') as file:
-    intents = json.load(file)
+# Cargar archivos del modelo entrenado
+intents = json.loads(open("intents.json").read())
+words = pickle.load(open("words.pkl", "rb"))
+classes = pickle.load(open("classes.pkl", "rb"))
+model = load_model("chatbot_model.h5")
 
-words = []
-classes = []
-documents = []
-ignore_letters = ['!', '?', ',', '.']
+# Funciones auxiliares
+def clean_up_sentence(sentence):
+    sentence_words = nltk.word_tokenize(sentence)
+    sentence_words = [lemmatizer.lemmatize(word.lower()) for word in sentence_words]
+    return sentence_words
 
-# ✅ Importar manualmente el tokenizador sin buscar en `punkt_tab`
-from nltk.tokenize.simple import SpaceTokenizer
+def bag_of_words(sentence):
+    sentence_words = clean_up_sentence(sentence)
+    bag = [0] * len(words)
+    for s in sentence_words:
+        for i, w in enumerate(words):
+            if w == s:
+                bag[i] = 1
+    return np.array(bag)
 
-tokenizer = SpaceTokenizer()
+def predict_class(sentence):
+    bow = bag_of_words(sentence)
+    res = model.predict(np.array([bow]))[0]
+    ERROR_THRESHOLD = 0.25
+    results = [[i, r] for i, r in enumerate(res) if r > ERROR_THRESHOLD]
 
-# Procesar los patrones y respuestas
-for intent in intents['intents']:
-    for pattern in intent['patterns']:
-        word_list = tokenizer.tokenize(pattern)  # ✅ Uso de SpaceTokenizer
-        words.extend(word_list)
-        documents.append((word_list, intent['tag']))
-        if intent['tag'] not in classes:
-            classes.append(intent['tag'])
+    results.sort(key=lambda x: x[1], reverse=True)
+    return_list = []
+    for r in results:
+        return_list.append({"intent": classes[r[0]], "probability": str(r[1])})
+    return return_list
 
-# Lematizar y ordenar las palabras
-words = [lemmatizer.lemmatize(word.lower()) for word in words if word not in ignore_letters]
-words = sorted(set(words))
-classes = sorted(set(classes))
-
-# Guardar palabras y clases para usarlas en el modelo
-pickle.dump(words, open('words.pkl', 'wb'))
-pickle.dump(classes, open('classes.pkl', 'wb'))
-
-# Crear los datos de entrenamiento
-training = []
-output_empty = [0] * len(classes)
-
-for document in documents:
-    bag = []
-    word_patterns = document[0]
-    word_patterns = [lemmatizer.lemmatize(word.lower()) for word in word_patterns]
+def get_response(intents_list, intents_json):
+    if len(intents_list) == 0:
+        return "Lo siento, no entendí tu mensaje."
     
-    for word in words:
-        if word in word_patterns:
-            bag.append(1)
-        else:
-            bag.append(0)
+    tag = intents_list[0]["intent"]
+    for intent in intents_json["intents"]:
+        if intent["tag"] == tag:
+            return random.choice(intent["responses"])
 
-    output_row = list(output_empty)
-    output_row[classes.index(document[1])] = 1
-    training.append([bag, output_row])
+    return "Lo siento, no tengo una respuesta para eso."
 
-# Mezclar datos para mejorar el rendimiento
-random.shuffle(training)
-training = np.array(training, dtype=object)
+# Ruta de recepción desde Twilio
+@app.route("/whatsapp", methods=["POST"])
+def whatsapp():
+    try:
+        msg = request.values.get("Body", "")
+        from_number = request.values.get("From")
+        print(f"📩 Mensaje recibido de {from_number}: {msg}")
 
-train_x = list(training[:, 0])
-train_y = list(training[:, 1])
+        ints = predict_class(msg)
+        res = get_response(ints, intents)
 
-# Crear el modelo de red neuronal
-model = Sequential()
-model.add(Dense(128, input_shape=(len(train_x[0]),), activation='relu'))
-model.add(Dropout(0.5))
-model.add(Dense(64, activation='relu'))
-model.add(Dropout(0.5))
-model.add(Dense(len(train_y[0]), activation='softmax'))
+    except Exception as e:
+        print(f"❌ Error en el bot: {e}")
+        res = "Lo siento, ocurrió un error en el bot. Intenta más tarde."
 
-# Configurar el optimizador
-sgd = SGD(learning_rate=0.01, momentum=0.9, decay=1e-6)
-model.compile(loss='categorical_crossentropy', optimizer=sgd, metrics=['accuracy'])
+    resp = MessagingResponse()
+    resp.message(res)
+    return str(resp)
 
-# Entrenar el modelo
-model.fit(np.array(train_x), np.array(train_y), epochs=200, batch_size=5, verbose=1)
-
-# Guardar el modelo entrenado
-model.save('chatbot_model.h5')
-
-print("✅ Modelo entrenado y guardado correctamente.")
-
+# Ruta base (opcional)
+@app.route("/", methods=["GET"])
+def home():
+    return "🤖 LafiBot está activo."
 
