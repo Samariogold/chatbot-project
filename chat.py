@@ -19,9 +19,10 @@ from tensorflow.keras.models import load_model
 
 app = Flask(__name__)
 
+# Inicializar lematizador
 lemmatizer = WordNetLemmatizer()
 
-# Cargar archivos
+# Cargar archivos necesarios
 try:
     print("📦 Cargando archivos...")
     with open("intents.json") as file:
@@ -34,7 +35,7 @@ except Exception as e:
     print("❌ Error cargando archivos del bot:")
     traceback.print_exc()
 
-# Preprocesamiento
+# Funciones de preprocesamiento
 def clean_up_sentence(sentence):
     sentence_words = word_tokenize(sentence)
     sentence_words = [lemmatizer.lemmatize(word.lower()) for word in sentence_words]
@@ -42,19 +43,19 @@ def clean_up_sentence(sentence):
 
 def bag_of_words(sentence):
     sentence_words = clean_up_sentence(sentence)
-    print("🧹 Palabras limpias:", sentence_words)
     bag = [0] * len(words)
     for w in sentence_words:
         for i, word in enumerate(words):
             if word == w:
                 bag[i] = 1
-    print("📊 Array para el modelo:", bag)
     return np.array(bag)
 
+# Predicción de la intención
 def predict_class(sentence):
     try:
         print("🧠 Iniciando predicción...")
         bow = bag_of_words(sentence)
+        print("📊 Array para el modelo:", bow)
         res = model.predict(np.array([bow]))[0]
         print("🔮 Resultados del modelo:", res)
         threshold = 0.25
@@ -63,10 +64,11 @@ def predict_class(sentence):
         print("✅ Intents detectados:", results)
         return [{'intent': classes[r[0]], 'probability': str(r[1])} for r in results]
     except Exception as e:
-        print("❌ Error en predict_class:")
+        print("❌ Error en predict_class:", str(e))
         traceback.print_exc()
         return []
 
+# Selección de respuesta
 def get_response(intents_list, intents_json):
     if not intents_list:
         return "Lo siento, no entendí tu mensaje."
@@ -76,6 +78,7 @@ def get_response(intents_list, intents_json):
             return random.choice(intent['responses'])
     return "Lo siento, no tengo respuesta para eso."
 
+# Ruta principal para WhatsApp
 @app.route("/whatsapp", methods=["POST"])
 def whatsapp():
     try:
@@ -94,6 +97,6 @@ def whatsapp():
     resp.message(res)
     return str(resp)
 
-# Local
+# Ejecutar localmente
 if __name__ == "__main__":
     app.run(debug=True)
