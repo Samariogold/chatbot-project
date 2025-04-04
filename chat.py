@@ -53,6 +53,7 @@ def bag_of_words(sentence):
 def predict_class(sentence):
     print("🧠 Iniciando predicción...")
     bow = bag_of_words(sentence)
+    print(f"📊 Bag of Words: {bow}")  # ← Nuevo log para depurar
     res = model.predict(np.array([bow]))[0]
     threshold = 0.25
     results = [[i, r] for i, r in enumerate(res) if r > threshold]
