@@ -9,16 +9,18 @@ from twilio.twiml.messaging_response import MessagingResponse
 
 # NLTK
 import nltk
-nltk.download('punkt')
 nltk.download('wordnet')
+nltk.download('omw-1.4')
+
 from nltk.stem import WordNetLemmatizer
-from nltk.tokenize import word_tokenize
+from nltk.tokenize.simple import SpaceTokenizer
 from tensorflow.keras.models import load_model
 
 app = Flask(__name__)
-
 lemmatizer = WordNetLemmatizer()
+tokenizer = SpaceTokenizer()
 
+# Cargar archivos
 try:
     print("📦 Cargando archivos...")
     with open("intents.json") as file:
@@ -28,34 +30,38 @@ try:
     model = load_model("chatbot_model.h5")
     print("✅ Recursos cargados correctamente.")
 except Exception as e:
-    print("❌ Error cargando archivos:")
+    print("❌ Error cargando archivos del bot:")
     traceback.print_exc()
 
+# Preprocesamiento
 def clean_up_sentence(sentence):
-    sentence_words = word_tokenize(sentence)
+    sentence_words = tokenizer.tokenize(sentence)  # ← CAMBIO aquí
     sentence_words = [lemmatizer.lemmatize(word.lower()) for word in sentence_words]
     return sentence_words
 
 def bag_of_words(sentence):
     sentence_words = clean_up_sentence(sentence)
+    print(f"🧹 Palabras procesadas: {sentence_words}")
     bag = [0] * len(words)
     for w in sentence_words:
         for i, word in enumerate(words):
             if word == w:
                 bag[i] = 1
+    print(f"📊 Array para el modelo: {bag}")
     return np.array(bag)
 
 def predict_class(sentence):
     try:
         print("🧠 Iniciando predicción...")
         bow = bag_of_words(sentence)
-        print(f"📊 Array para el modelo: {bow}")
         res = model.predict(np.array([bow]))[0]
         print(f"📈 Resultados del modelo: {res}")
         threshold = 0.25
         results = [[i, r] for i, r in enumerate(res) if r > threshold]
         results.sort(key=lambda x: x[1], reverse=True)
-        return [{'intent': classes[r[0]], 'probability': str(r[1])} for r in results]
+        predictions = [{'intent': classes[r[0]], 'probability': str(r[1])} for r in results]
+        print(f"🤖 Predicción: {predictions}")
+        return predictions
     except Exception as e:
         print("❌ Error en predict_class:")
         traceback.print_exc()
@@ -75,12 +81,11 @@ def whatsapp():
     try:
         msg = request.values.get("Body", "")
         from_number = request.values.get("From")
-        print(f"📩 Mensaje recibido de WhatsApp: {from_number}: {msg}")
-
+        print(f"📩 Mensaje recibido de {from_number}: {msg}")
         ints = predict_class(msg)
         res = get_response(ints, intents)
     except Exception as e:
-        print("❌ Error capturado en /whatsapp:")
+        print("❌ Error procesando el mensaje:")
         traceback.print_exc()
         res = "Lo siento, ocurrió un error en el bot. Intenta más tarde."
 
