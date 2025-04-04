@@ -18,7 +18,6 @@ from nltk.tokenize import word_tokenize
 from tensorflow.keras.models import load_model
 
 app = Flask(__name__)
-
 lemmatizer = WordNetLemmatizer()
 
 # Cargar archivos
@@ -31,7 +30,8 @@ try:
     model = load_model("chatbot_model.h5")
     print("✅ Recursos cargados correctamente.")
 except Exception as e:
-    print(f"❌ Error cargando archivos del bot: {e}")
+    print("❌ Error al cargar archivos:")
+    traceback.print_exc()
 
 # Preprocesamiento
 def clean_up_sentence(sentence):
@@ -46,14 +46,15 @@ def bag_of_words(sentence):
         for i, word in enumerate(words):
             if word == w:
                 bag[i] = 1
-    print(f"🧮 Bag of words generado: {bag}")
+    print(f"🧩 Bag of Words: {bag}")
     return np.array(bag)
 
 def predict_class(sentence):
     print("🧠 Iniciando predicción...")
     bow = bag_of_words(sentence)
+    print(f"🧠 Input al modelo: {bow}")
     res = model.predict(np.array([bow]))[0]
-    print(f"📈 Resultado de predicción: {res}")
+    print(f"🎯 Resultado crudo del modelo: {res}")
     threshold = 0.25
     results = [[i, r] for i, r in enumerate(res) if r > threshold]
     results.sort(key=lambda x: x[1], reverse=True)
@@ -68,6 +69,7 @@ def get_response(intents_list, intents_json):
             return random.choice(intent['responses'])
     return "Lo siento, no tengo respuesta para eso."
 
+# Ruta de WhatsApp
 @app.route("/whatsapp", methods=["POST"])
 def whatsapp():
     try:
@@ -76,9 +78,12 @@ def whatsapp():
         print(f"📩 Mensaje recibido de WhatsApp: {from_number}: {msg}")
 
         ints = predict_class(msg)
+        print(f"📊 Intents detectados: {ints}")
         res = get_response(ints, intents)
+        print(f"💬 Respuesta generada: {res}")
     except Exception as e:
-        print(f"❌ Error capturado en /whatsapp: {e}")
+        print("❌ Error capturado en /whatsapp:")
+        traceback.print_exc()
         res = "Lo siento, ocurrió un error en el bot. Intenta más tarde."
 
     resp = MessagingResponse()
