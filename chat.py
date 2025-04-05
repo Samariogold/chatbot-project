@@ -26,10 +26,10 @@ app = Flask(__name__)
 lemmatizer = WordNetLemmatizer()
 tokenizer = SpaceTokenizer()
 
-# Estado del usuario
+# Estado de los usuarios
 user_states = {}
 
-# Cargar archivos
+# Cargar modelos y recursos
 try:
     print("📦 Cargando recursos...")
     with open("intents.json") as file:
@@ -42,9 +42,11 @@ except Exception as e:
     print("❌ Error al cargar recursos:")
     traceback.print_exc()
 
+
 def clean_up_sentence(sentence):
     sentence_words = tokenizer.tokenize(sentence)
     return [lemmatizer.lemmatize(word.lower()) for word in sentence_words]
+
 
 def bag_of_words(sentence):
     sentence_words = clean_up_sentence(sentence)
@@ -54,6 +56,7 @@ def bag_of_words(sentence):
             if word == w:
                 bag[i] = 1
     return np.array(bag)
+
 
 def predict_class(sentence):
     try:
@@ -68,6 +71,7 @@ def predict_class(sentence):
         traceback.print_exc()
         return []
 
+
 def get_response(intents_list, intents_json):
     if not intents_list:
         return "Lo siento, no entendí tu mensaje."
@@ -77,15 +81,18 @@ def get_response(intents_list, intents_json):
             return random.choice(intent['responses'])
     return "Lo siento, no tengo respuesta para eso."
 
+
 def mostrar_empresas():
     empresas = get_empresas_unicas()
     opciones = "\n".join([f"{i+1}. {e}" for i, e in enumerate(empresas)])
     return f"¡Hola! Soy Lafi 🤖. Estoy aquí para ayudarte a vivir tu próxima Lafiaventura.\n\nPrimero, dime qué empresa o persona deseas explorar. Aquí tienes algunas opciones:\n{opciones}"
 
+
 def mostrar_lafiaventuras(empresa):
-    aventuras = get_lafiaventuras_por_empresa(empresa)
+    aventuras = get_lafiaventuras(empresa)
     opciones = "\n".join([f"{i+1}. {a}" for i, a in enumerate(aventuras)])
     return f"Estas son las Lafiaventuras disponibles para *{empresa}*:\n{opciones}\n\nResponde con el número o el nombre de la Lafiaventura que deseas hacer."
+
 
 @app.route("/whatsapp", methods=["POST"])
 def whatsapp():
@@ -96,26 +103,25 @@ def whatsapp():
 
         print(f"📩 Mensaje recibido de {user_id}: {msg}")
 
-        # Detectar reinicio
+        # Reiniciar conversación con palabras clave
         if msg.lower() in ["hola", "inicio", "empezar", "reiniciar", "start"]:
             user_states[user_id] = {"stage": "terminos"}
-            print("🌀 Flujo de reinicio activado, enviando términos...")
-            return str(MessagingResponse().message(
-                "🤖 Antes de continuar, por favor acepta nuestros Términos y Condiciones para procesar tus datos. Escribe *ACEPTO* para continuar."
-            ))
+            mensaje = "🤖 Antes de continuar, por favor acepta nuestros Términos y Condiciones para procesar tus datos. Escribe *ACEPTO* para continuar."
+            print("➡️ Enviando mensaje:", mensaje)
+            return str(MessagingResponse().message(mensaje))
 
-        # Revisar estado del usuario
+        # Obtener estado del usuario
         state = user_states.get(user_id)
 
         if not state:
             user_states[user_id] = {"stage": "terminos"}
-            return str(MessagingResponse().message(
-                "🤖 Antes de continuar, por favor acepta nuestros Términos y Condiciones para procesar tus datos. Escribe *ACEPTO* para continuar."
-            ))
+            mensaje = "🤖 Antes de continuar, por favor acepta nuestros Términos y Condiciones para procesar tus datos. Escribe *ACEPTO* para continuar."
+            print("➡️ Enviando mensaje:", mensaje)
+            return str(MessagingResponse().message(mensaje))
 
         elif state["stage"] == "terminos":
             if msg.strip().upper() == "ACEPTO":
-                registrar_usuario_wa(user_id)
+                registrar_aceptacion_usuario(user_id)
                 user_states[user_id]["stage"] = "empresa"
                 return str(MessagingResponse().message(mostrar_empresas()))
             else:
@@ -143,7 +149,7 @@ def whatsapp():
 
         elif state["stage"] == "lafiaventura":
             empresa = state["empresa"]
-            aventuras = get_lafiaventuras_por_empresa(empresa)
+            aventuras = get_lafiaventuras(empresa)
             seleccion = msg.lower()
 
             if seleccion.isdigit() and 1 <= int(seleccion) <= len(aventuras):
@@ -156,7 +162,7 @@ def whatsapp():
                     ))
                 lafiaventura = coincidencias[0]
 
-            codigo = get_codigo_disponible(empresa, lafiaventura)
+            codigo = get_codigo_disponible(empresa, lafiaventura, user_id)
             if codigo:
                 user_states[user_id]["stage"] = "finalizado"
                 return str(MessagingResponse().message(
@@ -172,7 +178,7 @@ def whatsapp():
                 "Si deseas iniciar otra aventura, escribe *Hola* para reiniciar el proceso."
             ))
 
-        # NLP fallback
+        # Fallback NLP
         ints = predict_class(msg)
         res = get_response(ints, intents)
         return str(MessagingResponse().message(res))
