@@ -7,7 +7,6 @@ import numpy as np
 from flask import Flask, request
 from twilio.twiml.messaging_response import MessagingResponse
 
-# NLTK
 import nltk
 nltk.download('wordnet')
 nltk.download('omw-1.4')
@@ -16,20 +15,23 @@ from nltk.stem import WordNetLemmatizer
 from nltk.tokenize.simple import SpaceTokenizer
 from tensorflow.keras.models import load_model
 
-# Importar servicio de Google Sheets
-from sheet_service import get_lafi_data
+from sheet_service import (
+    get_empresas_unicas,
+    get_lafiaventuras_por_empresa,
+    get_codigo_disponible,
+    registrar_usuario_wa
+)
 
 app = Flask(__name__)
 lemmatizer = WordNetLemmatizer()
 tokenizer = SpaceTokenizer()
 
-# Estados por usuario
+# Estado del usuario
 user_states = {}
-last_interaction = {}
 
 # Cargar archivos
 try:
-    print("📦 Cargando archivos...")
+    print("📦 Cargando recursos...")
     with open("intents.json") as file:
         intents = json.load(file)
     words = pickle.load(open("words.pkl", "rb"))
@@ -37,40 +39,32 @@ try:
     model = load_model("chatbot_model.h5")
     print("✅ Recursos cargados correctamente.")
 except Exception as e:
-    print("❌ Error cargando archivos del bot:")
+    print("❌ Error al cargar recursos:")
     traceback.print_exc()
 
-# Preprocesamiento
 def clean_up_sentence(sentence):
     sentence_words = tokenizer.tokenize(sentence)
-    sentence_words = [lemmatizer.lemmatize(word.lower()) for word in sentence_words]
-    return sentence_words
+    return [lemmatizer.lemmatize(word.lower()) for word in sentence_words]
 
 def bag_of_words(sentence):
     sentence_words = clean_up_sentence(sentence)
-    print(f"🧹 Palabras procesadas: {sentence_words}")
     bag = [0] * len(words)
     for w in sentence_words:
         for i, word in enumerate(words):
             if word == w:
                 bag[i] = 1
-    print(f"📊 Array para el modelo: {bag}")
     return np.array(bag)
 
 def predict_class(sentence):
     try:
-        print("🧠 Iniciando predicción...")
         bow = bag_of_words(sentence)
         res = model.predict(np.array([bow]))[0]
-        print(f"📈 Resultados del modelo: {res}")
         threshold = 0.25
         results = [[i, r] for i, r in enumerate(res) if r > threshold]
         results.sort(key=lambda x: x[1], reverse=True)
-        predictions = [{'intent': classes[r[0]], 'probability': str(r[1])} for r in results]
-        print(f"🤖 Predicción: {predictions}")
-        return predictions
+        return [{'intent': classes[r[0]], 'probability': str(r[1])} for r in results]
     except Exception as e:
-        print("❌ Error en predict_class:")
+        print("❌ Error en predicción:")
         traceback.print_exc()
         return []
 
@@ -83,48 +77,112 @@ def get_response(intents_list, intents_json):
             return random.choice(intent['responses'])
     return "Lo siento, no tengo respuesta para eso."
 
-def get_enterprises():
-    data = get_lafi_data()
-    empresas = sorted(set(row['Empresa/persona'] for row in data))
-    return empresas
+def mostrar_empresas():
+    empresas = get_empresas_unicas()
+    opciones = "\n".join([f"{i+1}. {e}" for i, e in enumerate(empresas)])
+    return f"¡Hola! Soy Lafi 🤖. Estoy aquí para ayudarte a vivir tu próxima Lafiaventura.\n\nPrimero, dime qué empresa o persona deseas explorar. Aquí tienes algunas opciones:\n{opciones}"
+
+def mostrar_lafiaventuras(empresa):
+    aventuras = get_lafiaventuras_por_empresa(empresa)
+    opciones = "\n".join([f"{i+1}. {a}" for i, a in enumerate(aventuras)])
+    return f"Estas son las Lafiaventuras disponibles para *{empresa}*:\n{opciones}\n\nResponde con el número o el nombre de la Lafiaventura que deseas hacer."
 
 @app.route("/whatsapp", methods=["POST"])
 def whatsapp():
     try:
         msg = request.values.get("Body", "").strip()
         from_number = request.values.get("From")
+        user_id = from_number
 
-        print(f"📩 Mensaje recibido de {from_number}: {msg}")
+        print(f"📩 Mensaje recibido de {user_id}: {msg}")
 
+        # Detectar reinicio
+        if msg.lower() in ["hola", "inicio", "empezar", "reiniciar", "start"]:
+            user_states[user_id] = {"stage": "terminos"}
+            return str(MessagingResponse().message(
+                "🤖 Antes de continuar, por favor acepta nuestros Términos y Condiciones para procesar tus datos. Escribe *ACEPTO* para continuar."
+            ))
+
+        # Revisar estado del usuario
+        state = user_states.get(user_id)
+
+        if not state:
+            user_states[user_id] = {"stage": "terminos"}
+            return str(MessagingResponse().message(
+                "🤖 Antes de continuar, por favor acepta nuestros Términos y Condiciones para procesar tus datos. Escribe *ACEPTO* para continuar."
+            ))
+
+        elif state["stage"] == "terminos":
+            if msg.strip().upper() == "ACEPTO":
+                registrar_usuario_wa(user_id)
+                user_states[user_id]["stage"] = "empresa"
+                return str(MessagingResponse().message(mostrar_empresas()))
+            else:
+                return str(MessagingResponse().message(
+                    "Para continuar, por favor escribe *ACEPTO* para aceptar los Términos y Condiciones."
+                ))
+
+        elif state["stage"] == "empresa":
+            empresas = get_empresas_unicas()
+            seleccion = msg.lower()
+
+            if seleccion.isdigit() and 1 <= int(seleccion) <= len(empresas):
+                empresa = empresas[int(seleccion) - 1]
+            else:
+                coincidencias = [e for e in empresas if e.lower() == seleccion]
+                if not coincidencias:
+                    return str(MessagingResponse().message(
+                        "No encontré esa empresa/persona. Por favor responde con un número o nombre válido."
+                    ))
+                empresa = coincidencias[0]
+
+            user_states[user_id]["empresa"] = empresa
+            user_states[user_id]["stage"] = "lafiaventura"
+            return str(MessagingResponse().message(mostrar_lafiaventuras(empresa)))
+
+        elif state["stage"] == "lafiaventura":
+            empresa = state["empresa"]
+            aventuras = get_lafiaventuras_por_empresa(empresa)
+            seleccion = msg.lower()
+
+            if seleccion.isdigit() and 1 <= int(seleccion) <= len(aventuras):
+                lafiaventura = aventuras[int(seleccion) - 1]
+            else:
+                coincidencias = [a for a in aventuras if a.lower() == seleccion]
+                if not coincidencias:
+                    return str(MessagingResponse().message(
+                        "No encontré esa Lafiaventura. Por favor responde con un número o nombre válido."
+                    ))
+                lafiaventura = coincidencias[0]
+
+            codigo = get_codigo_disponible(empresa, lafiaventura)
+            if codigo:
+                user_states[user_id]["stage"] = "finalizado"
+                return str(MessagingResponse().message(
+                    f"🎉 Tu código para la Lafiaventura *{lafiaventura}* es: *{codigo}*.\n\n¡Nos vemos pronto! 🌟"
+                ))
+            else:
+                return str(MessagingResponse().message(
+                    "😕 Lo siento, no hay más códigos disponibles para esta Lafiaventura. Prueba con otra o intenta más tarde."
+                ))
+
+        elif state["stage"] == "finalizado":
+            return str(MessagingResponse().message(
+                "Si deseas iniciar otra aventura, escribe *Hola* para reiniciar el proceso."
+            ))
+
+        # NLP fallback
         ints = predict_class(msg)
-        intent = ints[0]['intent'] if ints else "desconocido"
-
-        # Si es saludo, iniciamos el flujo guiado con lista dinámica
-        if intent == "saludo":
-            user_states[from_number] = "esperando_empresa"
-            empresas = get_enterprises()
-            empresas_str = "\n".join(f"{i+1}. {e}" for i, e in enumerate(empresas))
-            user_states[from_number + '_empresas'] = empresas
-            respuesta = get_response(ints, intents).replace("[Espera la lista...]", empresas_str)
-            resp = MessagingResponse()
-            resp.message(respuesta)
-            return str(resp)
-
-        else:
-            # Respuestas estándar si no es flujo guiado
-            res = get_response(ints, intents)
-            resp = MessagingResponse()
-            resp.message(res)
-            return str(resp)
+        res = get_response(ints, intents)
+        return str(MessagingResponse().message(res))
 
     except Exception as e:
-        print("❌ Error procesando el mensaje:")
+        print("❌ Error procesando mensaje:")
         traceback.print_exc()
-        resp = MessagingResponse()
-        resp.message("Lo siento, ocurrió un error en el bot. Intenta más tarde.")
-        return str(resp)
+        return str(MessagingResponse().message(
+            "Lo siento, ocurrió un error en el bot. Intenta más tarde."
+        ))
 
-# Producción en Railway
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
