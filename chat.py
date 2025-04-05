@@ -107,7 +107,7 @@ def whatsapp():
         if msg.lower() in ["hola", "inicio", "empezar", "reiniciar", "start"]:
             user_states[user_id] = {"stage": "terminos"}
             mensaje = "🤖 Antes de continuar, por favor acepta nuestros Términos y Condiciones para procesar tus datos. Escribe *ACEPTO* para continuar."
-            print("➡️ Enviando mensaje:", mensaje)
+            print("✅ Mensaje de respuesta enviado a Twilio.")
             return str(MessagingResponse().message(mensaje))
 
         # Obtener estado del usuario
