@@ -20,7 +20,7 @@ def get_lafi_data():
     return data
 
 # Obtener empresas únicas
-def get_empresas():
+def get_empresas_unicas():
     data = get_lafi_data()
     return sorted(set(row['Empresa/persona'] for row in data if row['Empresa/persona']))
 
