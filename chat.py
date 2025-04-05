@@ -17,9 +17,9 @@ from tensorflow.keras.models import load_model
 
 from sheet_service import (
     get_empresas_unicas,
-    get_lafiaventuras_por_empresa,
+    get_lafiaventuras,
     get_codigo_disponible,
-    registrar_usuario_wa
+    registrar_aceptacion_usuario
 )
 
 app = Flask(__name__)
