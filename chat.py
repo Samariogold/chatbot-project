@@ -16,9 +16,16 @@ from nltk.stem import WordNetLemmatizer
 from nltk.tokenize.simple import SpaceTokenizer
 from tensorflow.keras.models import load_model
 
+# Importar servicio de Google Sheets
+from sheet_service import get_lafi_data
+
 app = Flask(__name__)
 lemmatizer = WordNetLemmatizer()
 tokenizer = SpaceTokenizer()
+
+# Estados por usuario
+user_states = {}
+last_interaction = {}
 
 # Cargar archivos
 try:
@@ -35,7 +42,7 @@ except Exception as e:
 
 # Preprocesamiento
 def clean_up_sentence(sentence):
-    sentence_words = tokenizer.tokenize(sentence)  # ← CAMBIO aquí
+    sentence_words = tokenizer.tokenize(sentence)
     sentence_words = [lemmatizer.lemmatize(word.lower()) for word in sentence_words]
     return sentence_words
 
@@ -76,23 +83,48 @@ def get_response(intents_list, intents_json):
             return random.choice(intent['responses'])
     return "Lo siento, no tengo respuesta para eso."
 
+def get_enterprises():
+    data = get_lafi_data()
+    empresas = sorted(set(row['Empresa/persona'] for row in data))
+    return empresas
+
 @app.route("/whatsapp", methods=["POST"])
 def whatsapp():
     try:
-        msg = request.values.get("Body", "")
+        msg = request.values.get("Body", "").strip()
         from_number = request.values.get("From")
+
         print(f"📩 Mensaje recibido de {from_number}: {msg}")
+
         ints = predict_class(msg)
-        res = get_response(ints, intents)
+        intent = ints[0]['intent'] if ints else "desconocido"
+
+        # Si es saludo, iniciamos el flujo guiado con lista dinámica
+        if intent == "saludo":
+            user_states[from_number] = "esperando_empresa"
+            empresas = get_enterprises()
+            empresas_str = "\n".join(f"{i+1}. {e}" for i, e in enumerate(empresas))
+            user_states[from_number + '_empresas'] = empresas
+            respuesta = get_response(ints, intents).replace("[Espera la lista...]", empresas_str)
+            resp = MessagingResponse()
+            resp.message(respuesta)
+            return str(resp)
+
+        else:
+            # Respuestas estándar si no es flujo guiado
+            res = get_response(ints, intents)
+            resp = MessagingResponse()
+            resp.message(res)
+            return str(resp)
+
     except Exception as e:
         print("❌ Error procesando el mensaje:")
         traceback.print_exc()
-        res = "Lo siento, ocurrió un error en el bot. Intenta más tarde."
+        resp = MessagingResponse()
+        resp.message("Lo siento, ocurrió un error en el bot. Intenta más tarde.")
+        return str(resp)
 
-    resp = MessagingResponse()
-    resp.message(res)
-    return str(resp)
-
+# Producción en Railway
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
