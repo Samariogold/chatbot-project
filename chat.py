@@ -99,6 +99,7 @@ def whatsapp():
         # Detectar reinicio
         if msg.lower() in ["hola", "inicio", "empezar", "reiniciar", "start"]:
             user_states[user_id] = {"stage": "terminos"}
+            print("🌀 Flujo de reinicio activado, enviando términos...")
             return str(MessagingResponse().message(
                 "🤖 Antes de continuar, por favor acepta nuestros Términos y Condiciones para procesar tus datos. Escribe *ACEPTO* para continuar."
             ))
