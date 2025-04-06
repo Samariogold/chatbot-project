@@ -96,29 +96,31 @@ def whatsapp():
 
         print(f"📩 Mensaje recibido de {user_id}: {msg}")
 
+        resp = MessagingResponse()
+
         if msg.lower() in ["hola", "inicio", "empezar", "reiniciar", "start"]:
             user_states[user_id] = {"stage": "terminos"}
             mensaje = "🤖 Antes de continuar, por favor acepta nuestros Términos y Condiciones para procesar tus datos. Escribe *ACEPTO* para continuar."
+            resp.message(mensaje)
             print("➡️ Enviando mensaje:", mensaje)
-            return str(MessagingResponse().message(mensaje))
+            return str(resp)
 
         state = user_states.get(user_id)
 
         if not state:
             user_states[user_id] = {"stage": "terminos"}
-            return str(MessagingResponse().message(
-                "🤖 Antes de continuar, por favor acepta nuestros Términos y Condiciones para procesar tus datos. Escribe *ACEPTO* para continuar."
-            ))
+            resp.message("🤖 Antes de continuar, por favor acepta nuestros Términos y Condiciones para procesar tus datos. Escribe *ACEPTO* para continuar.")
+            return str(resp)
 
         elif state["stage"] == "terminos":
             if msg.strip().upper() == "ACEPTO":
                 registrar_aceptacion_usuario(user_id)
                 user_states[user_id]["stage"] = "empresa"
-                return str(MessagingResponse().message(mostrar_empresas()))
+                resp.message(mostrar_empresas())
+                return str(resp)
             else:
-                return str(MessagingResponse().message(
-                    "Para continuar, por favor escribe *ACEPTO* para aceptar los Términos y Condiciones."
-                ))
+                resp.message("Para continuar, por favor escribe *ACEPTO* para aceptar los Términos y Condiciones.")
+                return str(resp)
 
         elif state["stage"] == "empresa":
             empresas = get_empresas_unicas()
@@ -129,14 +131,14 @@ def whatsapp():
             else:
                 coincidencias = [e for e in empresas if e.lower() == seleccion]
                 if not coincidencias:
-                    return str(MessagingResponse().message(
-                        "No encontré esa empresa/persona. Por favor responde con un número o nombre válido."
-                    ))
+                    resp.message("No encontré esa empresa/persona. Por favor responde con un número o nombre válido.")
+                    return str(resp)
                 empresa = coincidencias[0]
 
             user_states[user_id]["empresa"] = empresa
             user_states[user_id]["stage"] = "lafiaventura"
-            return str(MessagingResponse().message(mostrar_lafiaventuras(empresa)))
+            resp.message(mostrar_lafiaventuras(empresa))
+            return str(resp)
 
         elif state["stage"] == "lafiaventura":
             empresa = state["empresa"]
@@ -148,37 +150,34 @@ def whatsapp():
             else:
                 coincidencias = [a for a in aventuras if a.lower() == seleccion]
                 if not coincidencias:
-                    return str(MessagingResponse().message(
-                        "No encontré esa Lafiaventura. Por favor responde con un número o nombre válido."
-                    ))
+                    resp.message("No encontré esa Lafiaventura. Por favor responde con un número o nombre válido.")
+                    return str(resp)
                 lafiaventura = coincidencias[0]
 
             codigo = get_codigo_disponible(empresa, lafiaventura, user_id)
             if codigo:
                 user_states[user_id]["stage"] = "finalizado"
-                return str(MessagingResponse().message(
-                    f"🎉 Tu código para la Lafiaventura *{lafiaventura}* es: *{codigo}*.\n\n¡Nos vemos pronto! 🌟"
-                ))
+                resp.message(f"🎉 Tu código para la Lafiaventura *{lafiaventura}* es: *{codigo}*.\n\n¡Nos vemos pronto! 🌟")
             else:
-                return str(MessagingResponse().message(
-                    "😕 Lo siento, no hay más códigos disponibles para esta Lafiaventura. Prueba con otra o intenta más tarde."
-                ))
+                resp.message("😕 Lo siento, no hay más códigos disponibles para esta Lafiaventura. Prueba con otra o intenta más tarde.")
+            return str(resp)
 
         elif state["stage"] == "finalizado":
-            return str(MessagingResponse().message(
-                "Si deseas iniciar otra aventura, escribe *Hola* para reiniciar el proceso."
-            ))
+            resp.message("Si deseas iniciar otra aventura, escribe *Hola* para reiniciar el proceso.")
+            return str(resp)
 
+        # NLP fallback
         ints = predict_class(msg)
         res = get_response(ints, intents)
-        return str(MessagingResponse().message(res))
+        resp.message(res)
+        return str(resp)
 
     except Exception as e:
         print("❌ Error procesando mensaje:")
         traceback.print_exc()
-        return str(MessagingResponse().message(
-            "Lo siento, ocurrió un error en el bot. Intenta más tarde."
-        ))
+        resp = MessagingResponse()
+        resp.message("Lo siento, ocurrió un error en el bot. Intenta más tarde.")
+        return str(resp)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
