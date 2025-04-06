@@ -1,6 +1,3 @@
-# Guardar el archivo completo corregido como chat.py
-
-codigo_chat_py = '''
 import os
 import json
 import pickle
@@ -82,13 +79,13 @@ def get_response(intents_list, intents_json):
 
 def mostrar_empresas():
     empresas = get_empresas_unicas()
-    opciones = "\\n".join([f"{i+1}. {e}" for i, e in enumerate(empresas)])
-    return f"¡Hola! Soy Lafi 🤖. Estoy aquí para ayudarte a vivir tu próxima Lafiaventura.\\n\\nPrimero, dime qué empresa o persona deseas explorar. Aquí tienes algunas opciones:\\n{opciones}"
+    opciones = "\n".join([f"{i+1}. {e}" for i, e in enumerate(empresas)])
+    return f"¡Hola! Soy Lafi 🤖. Estoy aquí para ayudarte a vivir tu próxima Lafiaventura.\n\nPrimero, dime qué empresa o persona deseas explorar. Aquí tienes algunas opciones:\n{opciones}"
 
 def mostrar_lafiaventuras(empresa):
     aventuras = get_lafiaventuras(empresa)
-    opciones = "\\n".join([f"{i+1}. {a}" for i, a in enumerate(aventuras)])
-    return f"Estas son las Lafiaventuras disponibles para *{empresa}*:\\n{opciones}\\n\\nResponde con el número o el nombre de la Lafiaventura que deseas hacer."
+    opciones = "\n".join([f"{i+1}. {a}" for i, a in enumerate(aventuras)])
+    return f"Estas son las Lafiaventuras disponibles para *{empresa}*:\n{opciones}\n\nResponde con el número o el nombre de la Lafiaventura que deseas hacer."
 
 @app.route("/whatsapp", methods=["POST"])
 def whatsapp():
@@ -186,9 +183,3 @@ def whatsapp():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
-'''
-
-with open("/mnt/data/chat.py", "w") as f:
-    f.write(codigo_chat_py)
-
-"/mnt/data/chat.py"
